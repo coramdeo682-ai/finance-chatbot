@@ -82,14 +82,19 @@ df = load_data()
 if df.empty:
     st.warning("데이터가 없습니다. 로컬 봇이 데이터를 수집했는지 확인해주세요.")
 else:
-    # 2. 사이드바 (요청사항 반영: 제목만 표시)
+    # 2. 사이드바 (요청사항 반영: 제목 및 순번 표시)
     with st.sidebar:
         st.header(f"🗂️ 수집된 영상: {len(df)}개")
         
-        # [수정됨] 제목만 깔끔하게 표시
+        # [수정됨] 제목과 함께 앞에 '순번'을 붙여서 표시
         if '제목' in df.columns:
-            # 최신순 정렬 (수집일시 기준 내림차순이라고 가정)
+            # 제목 컬럼만 가져오기
             display_df = df[['제목']].copy()
+            
+            # [수정 포인트] 맨 앞에 '순번' 컬럼 삽입 (1부터 시작)
+            display_df.insert(0, '순번', range(1, len(display_df) + 1))
+            
+            # hide_index=True로 설정하여 기본 인덱스는 숨기고 우리가 만든 '순번'을 보여줍니다.
             st.dataframe(display_df, use_container_width=True, hide_index=True)
         else:
             st.error("'제목' 컬럼을 찾을 수 없습니다.")
