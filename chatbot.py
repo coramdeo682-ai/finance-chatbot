@@ -16,8 +16,8 @@ st.set_page_config(page_title="나만의 금융 AI 비서", page_icon="💰", la
 @st.cache_data(ttl=600) # 10분마다 갱신
 def load_data():
     try:
-        # Streamlit Secrets에서 키 가져오기
-        json_creds = json.loads(st.secrets["GCP_CREDENTIALS_JSON"])
+        # [수정됨] TOML 섹션을 딕셔너리로 바로 가져오기 (오류 해결)
+        json_creds = dict(st.secrets["gcp_service_account"])
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(json_creds, scope)
         client = gspread.authorize(creds)
