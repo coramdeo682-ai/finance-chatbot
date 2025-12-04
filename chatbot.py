@@ -9,7 +9,7 @@ import datetime
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 3.2)", page_icon="📈", layout="wide")
+st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 3.4)", page_icon="📈", layout="wide")
 
 # ==========================================
 # [함수] 구글 시트 연결 및 데이터 관리
@@ -104,12 +104,11 @@ def ask_gemini(query, context, mode="analysis"):
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # [중요] 오늘 날짜를 가져와서 프롬프트에 주입
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         
         if mode == "analysis":
             prompt = f"""
-            당신은 수석 금융 투자 전략가입니다 (기준일: {today}).
+            당신은 수석 금융 투자 전략가입니다.
             아래 [분석 데이터]를 기반으로 질문에 답하세요.
             
             [분석 데이터]
@@ -118,16 +117,17 @@ def ask_gemini(query, context, mode="analysis"):
             {query}
             
             [지침]
-            1. '게시일'을 확인하여 정보의 최신성을 먼저 언급하세요.
+            1. 데이터에 '게시일'이 있다면 참고하되, 없으면 내용의 논리성에 집중하세요.
             2. 여러 자료를 종합하여 명확한 투자 포지션(매수/매도/관망)을 제안하세요.
             """
         elif mode == "critique":
-            # [수정됨] 비평가에게도 '오늘 날짜'를 알려주어 시점 착오 방지
+            # [수정됨] 사용자가 요청한 3단계 비평 구조 적용
             prompt = f"""
             당신은 '금융 리스크 관리자'입니다.
-            현재 시점은 **{today}** 입니다. 이 날짜를 기준으로 과거와 미래를 구분하세요.
+            현재 시점은 {today}입니다. 이 날짜는 당신이 현재에 있다는 인식의 기준일 뿐입니다.
+            DB 자료에 '게시일'이 없다면 시의성을 문제 삼지 말고, 논리의 타당성을 평가하세요.
             
-            아래 AI 답변을 검토하고 냉정한 비평 리포트를 작성하세요.
+            아래 AI 답변을 검토하고 다음 3가지 항목으로 비평 리포트를 작성하세요.
 
             [사용자 질문]
             {query}
@@ -135,9 +135,14 @@ def ask_gemini(query, context, mode="analysis"):
             {context}
 
             [작성 양식]
-            1. 🚨 **리스크 경고:** 답변에서 간과한 경제 변수(금리, 환율 등) 지적.
-            2. 📉 **데이터 시의성 평가:** 인용된 데이터가 현재 시점({today}) 기준으로 너무 오래되지 않았는지 확인. (예: 2025년인데 2024년 자료를 쓴 경우 경고)
-            3. ⚖️ **최종 판단:** '신뢰', '주의', '위험' 중 하나 선택.
+            1. 🌟 **긍정적 평가 (Good Points):** - 이 답변이 가진 장점과 투자 전략으로서의 가치를 구체적으로 언급해 주세요.
+               - 어떤 투자자에게 도움이 되는 조언인지 설명하세요.
+               
+            2. ⚖️ **비판적 검증 (Critical Review):** - 객관적인 경제 데이터(금리, 인플레이션, 환율 등)나 시장의 반대 논리를 들어 이 의견을 비판해 주세요.
+               - 이 전략이 실패할 수 있는 리스크 시나리오를 제시하세요.
+               
+            3. 💡 **추가 인사이트 (Key Implications):** - 답변에서 다루지 않았지만 고려해야 할 추가적인 시사점을 도출해 주세요.
+               - 투자자가 지금 당장 확인해야 할 지표나 행동 요령을 제안하세요.
             """
 
         response = model.generate_content(prompt)
@@ -148,10 +153,10 @@ def ask_gemini(query, context, mode="analysis"):
 # ==========================================
 # [UI] 화면 구성 시작
 # ==========================================
-st.title("📈 금융 인사이트 AI Pro (Ver 3.2)")
+st.title("📈 금융 인사이트 AI Pro (Ver 3.4)")
 
 # [확인용] 버전 업데이트 알림
-st.toast("✅ V3.2 업데이트: 비평 AI의 날짜 인식 오류가 수정되었습니다.", icon="📅")
+st.toast("✅ V3.4 업데이트: 비평 리포트가 3단계(장점/비판/인사이트)로 고도화되었습니다.", icon="✨")
 
 df = load_data()
 
@@ -216,13 +221,13 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
             col1, col2 = st.columns([0.7, 0.3])
             with col1:
                 st.write("### 🧐 답변 검증이 필요하신가요?")
-                st.caption("AI 리스크 관리자가 이 답변의 위험 요소를 분석해 드립니다.")
+                st.caption("AI 리스크 관리자가 이 답변의 장단점을 분석해 드립니다.")
             with col2:
                 if st.button("🚩 리스크 비평 보기", key="critique_btn_v3", type="secondary", use_container_width=True):
                     last_msg_content = st.session_state.messages[-1]["content"]
                     last_user_query = st.session_state.messages[-2]["content"]
                     
-                    with st.spinner("🔍 외부 지식과 대조하며 팩트 체크 중..."):
+                    with st.spinner("🔍 3단계 정밀 검증 중 (장점-비판-인사이트)..."):
                         critique = ask_gemini(last_user_query, last_msg_content, mode="critique")
                         st.session_state.messages.append({"role": "assistant", "content": f"📝 **[전문가 비평 리포트]**\n\n{critique}"})
                         st.rerun()
