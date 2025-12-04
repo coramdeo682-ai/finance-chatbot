@@ -9,7 +9,7 @@ import datetime
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 3.6)", page_icon="📈", layout="wide")
+st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 4.0)", page_icon="📈", layout="wide")
 
 # ==========================================
 # [함수] 구글 시트 연결 및 데이터 관리
@@ -122,7 +122,6 @@ def ask_gemini(query, context, mode="analysis"):
             3. **출처 표기 필수:** 주장의 근거가 되는 자료를 인용할 때는 반드시 **"[자료 N] 제목"** 또는 **"OOO 채널에 따르면"**과 같이 출처를 명확히 밝히세요. 이때 [자료 N]의 번호는 제공된 텍스트에 적힌 번호를 그대로 사용해야 합니다.
             """
         elif mode == "critique":
-            # [수정됨] 사용자가 요청한 3단계 비평 구조 적용
             prompt = f"""
             당신은 '금융 리스크 관리자'입니다.
             현재 시점은 {today}입니다. 이 날짜는 당신이 현재에 있다는 인식의 기준일 뿐입니다.
@@ -152,128 +151,149 @@ def ask_gemini(query, context, mode="analysis"):
         return f"AI 오류: {e}"
 
 # ==========================================
-# [UI] 화면 구성 시작
+# [PAGE] 데이터 관리 페이지 (모바일 최적화)
 # ==========================================
-st.title("📈 금융 인사이트 AI Pro (Ver 3.6)")
+def show_db_management_page(df):
+    st.header("⚙️ DB 데이터 관리 센터")
+    st.info("모바일에서도 데이터를 쉽게 추가하고 관리하세요.")
 
-# [확인용] 버전 업데이트 알림
-st.toast("✅ V3.6 업데이트: 자료 인용 번호가 DB 순번과 일치하도록 수정되었습니다.", icon="🔢")
-
-df = load_data()
-
-# ------------------------------------------------------------------
-# [1] 사이드바: 수동 DB 저장
-# ------------------------------------------------------------------
-with st.sidebar:
-    st.title("🗂️ 데이터 제어 센터")
-    
-    st.markdown("### 📝 데이터 수동 입력")
-    st.info("ChatGPT가 만든 JSON을 아래에 붙여넣으세요.")
-    
-    json_input = st.text_area("JSON 입력창", height=200, placeholder='[{"제목": "...", "게시일": "2024-01-01"}]', key="json_input_area_v3")
-    
-    if st.button("💾 DB에 저장하기 (클릭)", key="save_btn_v3", type="primary", use_container_width=True):
-        if not json_input.strip():
-            st.warning("데이터가 비어있습니다.")
-        else:
-            try:
-                parsed_json = json.loads(json_input)
-                success, msg = append_data_to_sheet(parsed_json)
-                if success:
-                    st.success(msg)
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.error(msg)
-            except json.JSONDecodeError:
-                st.error("형식이 잘못되었습니다. 올바른 JSON을 입력하세요.")
+    # 1. 수동 입력 섹션
+    with st.container(border=True):
+        st.subheader("📝 데이터 수동 추가")
+        st.caption("ChatGPT/Gemini가 생성한 JSON을 아래에 붙여넣으세요.")
+        
+        json_input = st.text_area("JSON 입력", height=200, placeholder='[{"제목": "...", "게시일": "2024-01-01"}]', key="json_input_page")
+        
+        if st.button("💾 DB에 저장하기", key="save_btn_page", type="primary", use_container_width=True):
+            if not json_input.strip():
+                st.warning("내용이 비어있습니다.")
+            else:
+                try:
+                    parsed_json = json.loads(json_input)
+                    with st.spinner("구글 시트에 저장 중..."):
+                        success, msg = append_data_to_sheet(parsed_json)
+                        if success:
+                            st.success(msg)
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                except json.JSONDecodeError:
+                    st.error("잘못된 JSON 형식입니다.")
 
     st.divider()
-    
+
+    # 2. 데이터 목록 섹션
+    st.subheader(f"🗂️ 현재 DB 목록 ({len(df)}건)")
+    if st.button("🔄 목록 새로고침", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
     if not df.empty and '제목' in df.columns:
-        st.caption(f"현재 DB 데이터: {len(df)}건")
         cols_to_show = ['제목']
         if '게시일' in df.columns: cols_to_show.append('게시일')
         
         display_df = df[cols_to_show].copy()
         display_df.insert(0, 'No', range(1, len(display_df) + 1))
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
+        # 모바일 가독성을 위해 데이터프레임 높이 조절
+        st.dataframe(display_df, use_container_width=True, height=500, hide_index=True)
+    else:
+        st.info("데이터가 없습니다.")
+
+# ==========================================
+# [PAGE] 챗봇 페이지 (메인)
+# ==========================================
+def show_chatbot_page(df):
+    st.header("💬 AI 금융 투자 비서")
     
-    if st.button("🔄 새로고침", key="refresh_btn_v3"):
-        st.cache_data.clear()
+    # 채팅 기록 초기화
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 투자 전략에 대해 무엇이든 물어보세요."}]
+
+    # 채팅 출력
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"]).write(msg["content"])
+
+    # 비평 버튼 (마지막 답변이 AI일 때)
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+        if len(st.session_state.messages) > 1:
+            st.markdown("---")
+            with st.container(border=True):
+                col1, col2 = st.columns([0.6, 0.4])
+                with col1:
+                    st.write("##### 🧐 답변 검증")
+                    st.caption("AI 리스크 관리자의 비평을 들어보세요.")
+                with col2:
+                    if st.button("🚩 비평 보기", key="critique_btn_main", type="secondary", use_container_width=True):
+                        last_msg = st.session_state.messages[-1]["content"]
+                        last_query = st.session_state.messages[-2]["content"]
+                        with st.spinner("3단계 검증 중..."):
+                            critique = ask_gemini(last_query, last_msg, mode="critique")
+                            st.session_state.messages.append({"role": "assistant", "content": f"📝 **[전문가 비평 리포트]**\n\n{critique}"})
+                            st.rerun()
+
+    # 입력창
+    if prompt := st.chat_input("질문 입력 (예: 비트코인 전망)"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
         st.rerun()
 
-# ------------------------------------------------------------------
-# [2] 메인 채팅 인터페이스
-# ------------------------------------------------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 어떤 투자 정보가 궁금하신가요?"}]
-
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-# ------------------------------------------------------------------
-# [3] 답변 평가 (AI 비평) 버튼
-# ------------------------------------------------------------------
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
-    if len(st.session_state.messages) > 1: 
-        st.markdown("---")
-        with st.container(border=True):
-            col1, col2 = st.columns([0.7, 0.3])
-            with col1:
-                st.write("### 🧐 답변 검증이 필요하신가요?")
-                st.caption("AI 리스크 관리자가 이 답변의 장단점을 분석해 드립니다.")
-            with col2:
-                if st.button("🚩 리스크 비평 보기", key="critique_btn_v3", type="secondary", use_container_width=True):
-                    last_msg_content = st.session_state.messages[-1]["content"]
-                    last_user_query = st.session_state.messages[-2]["content"]
-                    
-                    with st.spinner("🔍 3단계 정밀 검증 중 (장점-비판-인사이트)..."):
-                        critique = ask_gemini(last_user_query, last_msg_content, mode="critique")
-                        st.session_state.messages.append({"role": "assistant", "content": f"📝 **[전문가 비평 리포트]**\n\n{critique}"})
-                        st.rerun()
-
-# ------------------------------------------------------------------
-# [4] 사용자 입력창
-# ------------------------------------------------------------------
-if prompt := st.chat_input("질문 예: 삼성전자 전망은? (최근 데이터 기준)"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.rerun()
-
-# ------------------------------------------------------------------
-# [5] 답변 생성 로직
-# ------------------------------------------------------------------
-if st.session_state.messages[-1]["role"] == "user":
-    user_query = st.session_state.messages[-1]["content"]
-    
-    search_cols = ['제목', '핵심주제', '요약', '카테고리']
-    valid_cols = [col for col in search_cols if col in df.columns]
-    
-    context_text = ""
-    if not df.empty and valid_cols:
-        mask = df[valid_cols].astype(str).apply(lambda x: x.str.contains(user_query, case=False).any(), axis=1)
-        filtered_df = df[mask]
-        target_df = filtered_df if not filtered_df.empty else df.tail(5)
+    # 답변 생성 로직
+    if st.session_state.messages[-1]["role"] == "user":
+        user_query = st.session_state.messages[-1]["content"]
         
-        # [수정됨] 참고 자료 번호를 '검색 순서(i)'가 아닌 '원본 데이터 인덱스(idx + 1)'로 변경
-        # 이렇게 하면 사이드바에 보이는 번호(No)와 답변의 [자료 N] 번호가 일치하게 됩니다.
-        for i, (idx, row) in enumerate(target_df.iterrows(), 1):
-            # idx는 0부터 시작하므로 +1을 해서 1부터 시작하는 사이드바 번호와 맞춥니다.
-            real_db_no = idx + 1
-            context_text += f"""
-            [자료 {real_db_no}]
-            - 제목: {row.get('제목')} (날짜: {row.get('게시일')})
-            - 채널명: {row.get('채널명')}
-            - 요약: {row.get('요약')}
-            - 시사점: {row.get('시사점')}
+        search_cols = ['제목', '핵심주제', '요약', '카테고리']
+        valid_cols = [col for col in search_cols if col in df.columns]
+        
+        context_text = ""
+        if not df.empty and valid_cols:
+            mask = df[valid_cols].astype(str).apply(lambda x: x.str.contains(user_query, case=False).any(), axis=1)
+            filtered_df = df[mask]
+            target_df = filtered_df if not filtered_df.empty else df.tail(5)
             
-            """
-    else:
-        context_text = "관련 데이터가 없습니다."
+            for i, (idx, row) in enumerate(target_df.iterrows(), 1):
+                real_db_no = idx + 1
+                context_text += f"""
+                [자료 {real_db_no}]
+                - 제목: {row.get('제목')} (날짜: {row.get('게시일')})
+                - 채널명: {row.get('채널명')}
+                - 요약: {row.get('요약')}
+                - 시사점: {row.get('시사점')}
+                
+                """
+        else:
+            context_text = "관련 데이터가 없습니다."
 
-    with st.chat_message("assistant"):
-        with st.spinner("데이터 분석 중..."):
-            response = ask_gemini(user_query, context_text, mode="analysis")
-            st.write(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
+        with st.chat_message("assistant"):
+            with st.spinner("분석 중..."):
+                response = ask_gemini(user_query, context_text, mode="analysis")
+                st.write(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.rerun()
+
+# ==========================================
+# [Main] 메인 실행 함수
+# ==========================================
+def main():
+    # 데이터 로드 (전역 사용)
+    df = load_data()
+
+    # 사이드바 네비게이션
+    with st.sidebar:
+        st.title("📱 메뉴")
+        page = st.radio(
+            "이동할 페이지 선택",
+            ["💬 AI 투자 비서", "⚙️ DB 데이터 관리"],
+            index=0
+        )
+        st.divider()
+        st.caption("Ver 4.0 (Mobile Optimized)")
+
+    # 페이지 라우팅
+    if page == "⚙️ DB 데이터 관리":
+        show_db_management_page(df)
+    else:
+        show_chatbot_page(df)
+
+if __name__ == "__main__":
+    main()
