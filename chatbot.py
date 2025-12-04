@@ -9,7 +9,7 @@ import datetime
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 3.5)", page_icon="📈", layout="wide")
+st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 3.6)", page_icon="📈", layout="wide")
 
 # ==========================================
 # [함수] 구글 시트 연결 및 데이터 관리
@@ -119,7 +119,7 @@ def ask_gemini(query, context, mode="analysis"):
             [지침]
             1. 데이터에 '게시일'이 있다면 참고하되, 없으면 내용의 논리성에 집중하세요.
             2. 여러 자료를 종합하여 명확한 투자 포지션(매수/매도/관망)을 제안하세요.
-            3. **출처 표기 필수:** 주장의 근거가 되는 자료를 인용할 때는 반드시 **"[자료 N] 제목"** 또는 **"OOO 채널에 따르면"**과 같이 출처를 명확히 밝히세요. 두루뭉술하게 '자료에 따르면'이라고 하지 마세요.
+            3. **출처 표기 필수:** 주장의 근거가 되는 자료를 인용할 때는 반드시 **"[자료 N] 제목"** 또는 **"OOO 채널에 따르면"**과 같이 출처를 명확히 밝히세요. 이때 [자료 N]의 번호는 제공된 텍스트에 적힌 번호를 그대로 사용해야 합니다.
             """
         elif mode == "critique":
             # [수정됨] 사용자가 요청한 3단계 비평 구조 적용
@@ -154,10 +154,10 @@ def ask_gemini(query, context, mode="analysis"):
 # ==========================================
 # [UI] 화면 구성 시작
 # ==========================================
-st.title("📈 금융 인사이트 AI Pro (Ver 3.5)")
+st.title("📈 금융 인사이트 AI Pro (Ver 3.6)")
 
 # [확인용] 버전 업데이트 알림
-st.toast("✅ V3.5 업데이트: 답변 내 출처 표기 기능이 강화되었습니다.", icon="🔖")
+st.toast("✅ V3.6 업데이트: 자료 인용 번호가 DB 순번과 일치하도록 수정되었습니다.", icon="🔢")
 
 df = load_data()
 
@@ -255,10 +255,13 @@ if st.session_state.messages[-1]["role"] == "user":
         filtered_df = df[mask]
         target_df = filtered_df if not filtered_df.empty else df.tail(5)
         
-        # [수정됨] 참고 자료에 번호(ID)를 부여하여 AI가 인용하기 쉽게 만듦
+        # [수정됨] 참고 자료 번호를 '검색 순서(i)'가 아닌 '원본 데이터 인덱스(idx + 1)'로 변경
+        # 이렇게 하면 사이드바에 보이는 번호(No)와 답변의 [자료 N] 번호가 일치하게 됩니다.
         for i, (idx, row) in enumerate(target_df.iterrows(), 1):
+            # idx는 0부터 시작하므로 +1을 해서 1부터 시작하는 사이드바 번호와 맞춥니다.
+            real_db_no = idx + 1
             context_text += f"""
-            [자료 {i}]
+            [자료 {real_db_no}]
             - 제목: {row.get('제목')} (날짜: {row.get('게시일')})
             - 채널명: {row.get('채널명')}
             - 요약: {row.get('요약')}
