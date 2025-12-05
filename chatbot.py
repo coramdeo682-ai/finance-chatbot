@@ -9,7 +9,7 @@ import datetime
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 4.5)", page_icon="📈", layout="wide")
+st.set_page_config(page_title="금융 인사이트 AI Pro (Ver 4.6)", page_icon="📈", layout="wide")
 
 # ==========================================
 # [함수] 구글 시트 연결
@@ -113,7 +113,6 @@ def ask_gemini(query, context, mode="analysis"):
             2. 반드시 **"[자료 N] 제목"** 형태로 출처를 밝히세요.
             """
         elif mode == "critique":
-            # [수정됨] 비평가에게 모든 정보를 다 제공한다는 것을 명시
             prompt = f"""
             당신은 '금융 리스크 관리자'입니다. (현재: {today})
             아래 제공된 [상세 원본 데이터]를 꼼꼼히 검토하여, AI의 답변을 비평하세요.
@@ -134,7 +133,6 @@ def ask_gemini(query, context, mode="analysis"):
             3. 💡 **추가 인사이트:** 놓친 시사점 보완.
             """
         
-        # 비평 모드일 때는 context가 딕셔너리이므로 처리 방식 분기
         if mode == "critique":
             final_prompt = prompt 
         else:
@@ -157,16 +155,40 @@ def show_db_management_page(df):
         st.markdown("##### 👇 아래 프롬프트를 복사하여 ChatGPT에게 보내세요")
         prompt_text = """
 당신은 수석 금융 데이터 분석가입니다.
-제공된 영상(또는 텍스트)의 내용을 심층 분석하여 아래의 JSON 포맷으로 출력해 주세요.
+위의 유튜브 링크의 해당 영상의 내용을 심층 분석해서 아래의 JSON 포맷으로 출력해 줘.
+
+[분석 지침]
+1. 다른 말(서론, 추임새)은 절대 하지 말고 **오직 JSON 코드 블록**만 출력하세요.
+2. 'key_arguments'와 'evidence'는 짝을 이루어 구체적으로 작성하세요.
+3. 수치(%, 금액, 날짜)가 있다면 반드시 포함하세요.
+4. 투자자 관점에서 실질적인 도움이 되는 정보를 추출하세요.
 
 [JSON 포맷]
 {
-  "video_id": "", "url": "", "title": "영상 제목", "channel_name": "채널명",
-  "published_at": "YYYY-MM-DD", "category": "주식/부동산/코인/거시경제",
-  "main_topic": "핵심주제", "key_arguments": ["주장1", "주장2"],
-  "evidence": ["근거1", "근거2"], "implications": "시사점",
-  "validity_check": "타당성 검토", "sentiment": "긍정/부정",
-  "tags": "태그1, 태그2", "full_summary": "요약"
+  "video_id": "영상ID (URL에서 추출, 모르면 공란)",
+  "url": "영상 전체 URL",
+  "title": "영상 제목",
+  "channel_name": "채널명",
+  "published_at": "YYYY-MM-DD (게시일 필수)",
+  "category": "주식/부동산/코인/거시경제 중 택1 (필수)",
+  "main_topic": "영상을 관통하는 핵심 주제 (1문장)",
+  "key_arguments": [
+    "핵심 주장 1",
+    "핵심 주장 2",
+    "핵심 주장 3",
+    "핵심 주장 4"
+  ],
+  "evidence": [
+    "주장 1에 대한 근거(수치/팩트)",
+    "주장 2에 대한 근거",
+    "주장 3에 대한 근거",
+    "주장 4에 대한 근거"
+  ],
+  "implications": "투자자를 위한 시사점 및 구체적인 액션 플랜",
+  "validity_check": "논리적 타당성 및 비판적 검토",
+  "sentiment": "긍정/부정/중립",
+  "tags": "키워드1, 키워드2, 키워드3, 키워드4",
+  "full_summary": "전체 내용 상세 요약 (서론-본론-결론)"
 }
         """
         st.code(prompt_text, language="text")
@@ -186,27 +208,33 @@ def show_db_management_page(df):
     if st.button("🔄 새로고침", use_container_width=True): st.cache_data.clear(); st.rerun()
 
     if not df.empty and 'title' in df.columns:
-        # [수정 1] 핵심주제(main_topic) 추가 및 컬럼 설정 최적화
+        # [수정 1] 핵심주제 포함
         cols_to_show = ['title', 'main_topic', 'published_at', 'category']
         valid_cols = [c for c in cols_to_show if c in df.columns]
         
         display_df = df[valid_cols].copy()
         display_df.insert(0, 'No', range(1, len(display_df) + 1))
         
-        # column_config를 사용하여 가독성 개선 (텍스트 잘림 방지)
-        st.dataframe(
-            display_df, 
-            use_container_width=True, 
-            height=500, 
-            hide_index=True,
-            column_config={
-                "No": st.column_config.TextColumn("No", width="small"),
-                "title": st.column_config.TextColumn("영상 제목", width="large"),
-                "main_topic": st.column_config.TextColumn("핵심 주제", width="large"), # 핵심주제 넓게
-                "published_at": st.column_config.TextColumn("게시일", width="small"),
-                "category": st.column_config.TextColumn("분류", width="small")
-            }
-        )
+        # [수정 2] HTML 테이블 스타일링 (줄바꿈 및 너비 조정)
+        st.markdown("""
+        <style>
+        .styled-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .styled-table th { background-color: #f0f2f6; border: 1px solid #e0e0e0; padding: 10px; text-align: center; }
+        .styled-table td { border: 1px solid #e0e0e0; padding: 10px; vertical-align: top; }
+        
+        /* 컬럼별 너비 지정 (비율로 조정) */
+        .styled-table td:nth-child(1) { width: 5%; text-align: center; font-weight: bold; } /* No */
+        .styled-table td:nth-child(2) { width: 30%; word-break: keep-all; } /* 제목 (줄바꿈 허용) */
+        .styled-table td:nth-child(3) { width: 45%; word-break: keep-all; } /* 핵심주제 (줄바꿈 허용) */
+        .styled-table td:nth-child(4) { width: 10%; text-align: center; white-space: nowrap; } /* 게시일 (한줄) */
+        .styled-table td:nth-child(5) { width: 10%; text-align: center; white-space: nowrap; } /* 분류 (한줄) */
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 데이터프레임을 HTML로 변환하여 출력
+        html = display_df.to_html(index=False, classes='styled-table', escape=True)
+        st.markdown(html, unsafe_allow_html=True)
+        
     else:
         st.info("데이터가 없습니다.")
 
@@ -231,7 +259,6 @@ def show_chatbot_page(df):
                     st.caption("AI 리스크 관리자가 심층 분석 데이터를 기반으로 비평합니다.")
                 with col2:
                     if st.button("🚩 비평 보기", key="critique_btn", type="secondary", use_container_width=True):
-                        # [수정 2] 비평가에게 원본 데이터(Raw Data)를 통째로 넘김
                         last_msg = st.session_state.messages[-1]["content"]
                         last_query = st.session_state.messages[-2]["content"]
                         raw_context = st.session_state.get("last_raw_context", "원본 데이터 없음")
@@ -257,7 +284,7 @@ def show_chatbot_page(df):
         valid_cols = [col for col in search_target if col in df.columns]
         
         context_text = ""
-        full_raw_data = "" # 비평가를 위한 상세 원본 데이터
+        full_raw_data = "" 
         
         if not df.empty and valid_cols:
             mask = df[valid_cols].astype(str).apply(lambda x: x.str.contains(user_query, case=False).any(), axis=1)
@@ -267,7 +294,6 @@ def show_chatbot_page(df):
             for i, (idx, row) in enumerate(target_df.iterrows(), 1):
                 real_db_no = idx + 1
                 
-                # 분석가용 요약 정보
                 context_text += f"""
                 [자료 {real_db_no}]
                 - 제목: {row.get('title')} (날짜: {row.get('published_at')})
@@ -275,7 +301,6 @@ def show_chatbot_page(df):
                 - 근거: {row.get('evidence')}
                 """
                 
-                # 비평가용 상세 정보 (모든 컬럼 포함)
                 full_raw_data += f"""
                 === [자료 {real_db_no} 상세] ===
                 제목: {row.get('title')}
@@ -289,7 +314,6 @@ def show_chatbot_page(df):
                 =============================
                 """
                 
-            # 세션에 원본 데이터 저장 (비평 시 사용)
             st.session_state["last_raw_context"] = full_raw_data
             
         else:
